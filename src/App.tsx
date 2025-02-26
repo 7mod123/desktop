@@ -228,50 +228,48 @@ function App() {
     console.log(`Joining room: ${roomToJoin}...`);
 
     try {
-      // Check if BlackHole is available in desktop mode
-      if (isTauriAvailable && autoStartCapture) {
-        // In desktop mode, verify audio device availability before starting
-        if (
-          selectedDevice &&
-          selectedDevice.toLowerCase().includes("blackhole")
-        ) {
-          try {
-            // Verify BlackHole exists by checking the devices list
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const audioInputs = devices.filter(
-              (device) => device.kind === "audioinput"
-            );
-            const blackholeExists = audioInputs.some(
-              (device) =>
-                device.deviceId === selectedDevice ||
-                device.label.toLowerCase().includes("blackhole")
-            );
+      // Find BlackHole device if available
+      let blackholeDeviceId = selectedDevice;
 
-            if (!blackholeExists) {
-              console.warn(
-                "BlackHole device not found, will use default instead"
-              );
-            }
-
-            // Auto-start audio capture if requested
-            if (!isCapturing && autoStartCapture) {
-              console.log(
-                "Auto-starting audio capture with device:",
-                selectedDevice
-              );
-              await startAudioCapture();
-            }
-          } catch (error) {
-            console.error("Error checking audio devices:", error);
-            // Continue joining room even if device check fails
-          }
-        } else if (!isCapturing && autoStartCapture) {
-          // Start capture with whatever device is selected
-          console.log(
-            "Auto-starting audio capture with device:",
-            selectedDevice
+      // In desktop mode, verify audio device availability before starting
+      if (isTauriAvailable) {
+        try {
+          // Get all audio devices
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const audioInputs = devices.filter(
+            (device) => device.kind === "audioinput"
           );
-          await startAudioCapture();
+
+          // Look specifically for BlackHole
+          const blackholeDevice = audioInputs.find(
+            (device) =>
+              device.label.toLowerCase().includes("blackhole") ||
+              (device.deviceId === selectedDevice &&
+                audioDevices
+                  .find((d) => d.id === selectedDevice)
+                  ?.name.toLowerCase()
+                  .includes("blackhole"))
+          );
+
+          if (blackholeDevice) {
+            console.log("Found BlackHole device:", blackholeDevice.label);
+            blackholeDeviceId = blackholeDevice.deviceId;
+            setSelectedDevice(blackholeDeviceId);
+          } else {
+            console.warn("BlackHole device not found in available devices");
+          }
+
+          // Auto-start audio capture if requested
+          if (!isCapturing && autoStartCapture && blackholeDeviceId) {
+            console.log(
+              "Auto-starting audio capture with device:",
+              blackholeDeviceId
+            );
+            await startAudioCapture();
+          }
+        } catch (error) {
+          console.error("Error checking audio devices:", error);
+          // Continue joining room even if device check fails
         }
       }
 
@@ -282,6 +280,7 @@ function App() {
         roomName: details.roomName,
         serverUrl: details.serverUrl,
         hasToken: !!details.participantToken,
+        audioDevice: blackholeDeviceId || "default",
       });
 
       // Store room state first
@@ -291,7 +290,10 @@ function App() {
       setShowLiveKit(true);
       setIsJoiningRoom(false);
 
-      console.log("Room component should now be displayed");
+      console.log(
+        "Room component should now be displayed with audio device:",
+        blackholeDeviceId || "default"
+      );
     } catch (error) {
       console.error("Failed to join room:", error);
       setConnectionError(

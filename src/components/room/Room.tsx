@@ -152,9 +152,86 @@ function CallUI({ isCapturingSystemAudio = false }) {
   const [messages, setMessages] = useState<TranscriptionMessage[]>([]);
   const [searchNumber, setSearchNumber] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
   const [callRecords, setCallRecords] = useState<
     { date: string; summary: string }[]
   >([]);
+
+  // Monitor audio levels from microphone
+  useEffect(() => {
+    if (!localParticipant.isMicrophoneEnabled) return;
+
+    let audioContext: AudioContext | null = null;
+    let analyser: AnalyserNode | null = null;
+    let microphone: MediaStreamAudioSourceNode | null = null;
+    let dataArray: Uint8Array | null = null;
+
+    const setupAudioMonitoring = async () => {
+      try {
+        // Get the audio track from the local participant
+        const audioTrack = localParticipant.getTrack(
+          Track.Source.Microphone
+        )?.mediaStreamTrack;
+
+        if (!audioTrack) {
+          console.warn("No microphone track found");
+          return;
+        }
+
+        // Create a MediaStream with just this audio track
+        const stream = new MediaStream([audioTrack]);
+
+        // Set up audio context and analyzer
+        audioContext = new AudioContext();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+
+        // Connect the stream to the analyzer
+        microphone = audioContext.createMediaStreamSource(stream);
+        microphone.connect(analyser);
+
+        // Create data array for analyzing
+        const bufferLength = analyser.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLength);
+
+        // Start monitoring
+        const checkAudioLevel = () => {
+          if (!analyser || !dataArray) return;
+
+          analyser.getByteFrequencyData(dataArray);
+
+          // Calculate average level
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          const average = sum / dataArray.length / 255; // Normalize to 0-1
+
+          setAudioLevel(average);
+
+          // Continue monitoring
+          requestAnimationFrame(checkAudioLevel);
+        };
+
+        checkAudioLevel();
+        console.log(
+          "Audio monitoring started for",
+          isCapturingSystemAudio ? "BlackHole" : "microphone"
+        );
+      } catch (err) {
+        console.error("Error setting up audio monitoring:", err);
+      }
+    };
+
+    setupAudioMonitoring();
+
+    return () => {
+      // Clean up
+      if (audioContext) {
+        audioContext.close();
+      }
+    };
+  }, [localParticipant, isCapturingSystemAudio]);
 
   const handleSearch = async () => {
     if (!searchNumber) return;
@@ -365,6 +442,19 @@ function CallUI({ isCapturingSystemAudio = false }) {
                 )}
               </div>
               <div className="flex items-center space-x-2">
+                {/* Audio level indicator */}
+                <div className="flex items-center mr-2">
+                  <div className="h-4 w-20 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 transition-all"
+                      style={{ width: `${Math.min(100, audioLevel * 100)}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-xs text-gray-500 ml-1 w-8">
+                    {(audioLevel * 100).toFixed(0)}%
+                  </span>
+                </div>
+
                 <input
                   type="number"
                   placeholder="Enter number..."
@@ -533,6 +623,8 @@ export default function Room({
   // Safely create room options with fallbacks for audio settings
   const roomOptions: RoomOptions = useMemo(() => {
     try {
+      console.log("Setting up room options with audio device:", audioDeviceId);
+
       return {
         adaptiveStream: true,
         dynacast: true,
@@ -540,7 +632,7 @@ export default function Room({
           simulcast: true,
         },
         audioCaptureDefaults: {
-          deviceId: audioDeviceId,
+          deviceId: audioDeviceId || undefined,
           echoCancellation: !isCapturingSystemAudio,
           noiseSuppression: !isCapturingSystemAudio,
           autoGainControl: !isCapturingSystemAudio,
@@ -561,12 +653,39 @@ export default function Room({
 
   // Log audio device info for debugging
   useEffect(() => {
-    if (isCapturingSystemAudio && audioDeviceId) {
-      console.log("Using BlackHole for system audio capture", {
-        audioDeviceId,
+    if (audioDeviceId) {
+      console.log("Room component configured with audio device:", {
+        deviceId: audioDeviceId,
+        isCapturingSystemAudio,
       });
+
+      // Verify the device exists
+      navigator.mediaDevices
+        .enumerateDevices()
+        .then((devices) => {
+          const audioInputs = devices.filter(
+            (device) => device.kind === "audioinput"
+          );
+          const deviceExists = audioInputs.some(
+            (device) => device.deviceId === audioDeviceId
+          );
+
+          if (deviceExists) {
+            const device = audioInputs.find(
+              (device) => device.deviceId === audioDeviceId
+            );
+            console.log("Audio device found:", device?.label);
+          } else {
+            console.warn(
+              "Configured audio device not found in available devices"
+            );
+          }
+        })
+        .catch((err) => {
+          console.error("Error checking audio devices:", err);
+        });
     }
-  }, [isCapturingSystemAudio, audioDeviceId]);
+  }, [audioDeviceId, isCapturingSystemAudio]);
 
   const handleDisconnect = useCallback(() => {
     console.log("Room disconnected, calling onDisconnect handler");
