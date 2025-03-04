@@ -552,8 +552,8 @@ function App() {
                       className="text-blue-600 hover:underline"
                     >
                       Learn more about BlackHole
-                    </a>
-                  </div>
+        </a>
+      </div>
                 )}
 
                 {/* Auto-start option */}
