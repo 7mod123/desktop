@@ -691,7 +691,7 @@ export function PageClientImpl(props: { roomName: string; region?: string }) {
 
   if (error) {
     return (
-      <main data-lk-theme="default" style={{ height: "100%" }}>
+      <main data-lk-theme="light" style={{ height: "100%" }}>
         <div className="flex items-center justify-center h-full">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-red-600">{error}</p>
@@ -702,7 +702,7 @@ export function PageClientImpl(props: { roomName: string; region?: string }) {
   }
 
   return (
-    <main data-lk-theme="default" style={{ height: "100%" }}>
+    <main data-lk-theme="light" style={{ height: "100%" }}>
       {connectionDetails === undefined ? (
         <div className="flex items-center justify-center h-full">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>

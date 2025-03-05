@@ -427,6 +427,26 @@ function CallUI({ isCapturingSystemAudio = false }) {
 
   return (
     <div className="flex flex-col h-full">
+      {/* System Audio Notification */}
+      {isCapturingSystemAudio && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-green-100 border border-green-300 text-green-800 px-4 py-2 rounded-full shadow-lg flex items-center">
+          <svg
+            className="w-5 h-5 mr-2"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+            />
+          </svg>
+          System Audio Capture Active
+        </div>
+      )}
+
       {/* Main Content - Participant List */}
       <div className="w-full p-4">
         <div className="mx-auto max-w-xl">
@@ -624,6 +644,7 @@ export default function Room({
   const roomOptions: RoomOptions = useMemo(() => {
     try {
       console.log("Setting up room options with audio device:", audioDeviceId);
+      console.log("System audio capture enabled:", isCapturingSystemAudio);
 
       return {
         adaptiveStream: true,
@@ -633,6 +654,7 @@ export default function Room({
         },
         audioCaptureDefaults: {
           deviceId: audioDeviceId || undefined,
+          // Disable audio processing when using BlackHole to capture system audio
           echoCancellation: !isCapturingSystemAudio,
           noiseSuppression: !isCapturingSystemAudio,
           autoGainControl: !isCapturingSystemAudio,
@@ -653,19 +675,26 @@ export default function Room({
 
   // Log audio device info for debugging
   useEffect(() => {
-    if (audioDeviceId) {
-      console.log("Room component configured with audio device:", {
-        deviceId: audioDeviceId,
-        isCapturingSystemAudio,
-      });
+    const checkAudioDevice = async () => {
+      try {
+        // Get all audio devices
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = devices.filter(
+          (device) => device.kind === "audioinput"
+        );
 
-      // Verify the device exists
-      navigator.mediaDevices
-        .enumerateDevices()
-        .then((devices) => {
-          const audioInputs = devices.filter(
-            (device) => device.kind === "audioinput"
-          );
+        console.log(
+          "Available audio devices:",
+          audioInputs.map((d) => d.label)
+        );
+
+        if (audioDeviceId) {
+          console.log("Room component configured with audio device:", {
+            deviceId: audioDeviceId,
+            isCapturingSystemAudio,
+          });
+
+          // Verify the device exists
           const deviceExists = audioInputs.some(
             (device) => device.deviceId === audioDeviceId
           );
@@ -675,16 +704,29 @@ export default function Room({
               (device) => device.deviceId === audioDeviceId
             );
             console.log("Audio device found:", device?.label);
+
+            // Check if this is BlackHole
+            if (device?.label.toLowerCase().includes("blackhole")) {
+              console.log("Using BlackHole for system audio capture");
+            }
           } else {
             console.warn(
               "Configured audio device not found in available devices"
             );
+            setAudioError(
+              "Selected audio device not found. Using default microphone instead."
+            );
+            setIsUsingFallbackAudio(true);
           }
-        })
-        .catch((err) => {
-          console.error("Error checking audio devices:", err);
-        });
-    }
+        } else {
+          console.log("No specific audio device configured, using default");
+        }
+      } catch (err) {
+        console.error("Error checking audio devices:", err);
+      }
+    };
+
+    checkAudioDevice();
   }, [audioDeviceId, isCapturingSystemAudio]);
 
   const handleDisconnect = useCallback(() => {
@@ -698,14 +740,8 @@ export default function Room({
     console.error("Room connection error:", err);
 
     // Check for specific audio-related errors
-    if (
-      err.message.includes("audio") ||
-      err.message.includes("microphone") ||
-      err.message.includes("device")
-    ) {
-      setError(
-        `Audio device error: ${err.message}. Try using a different audio device.`
-      );
+    if (err.message.includes("audio") || err.message.includes("microphone")) {
+      setAudioError(`Audio error: ${err.message}`);
     } else {
       setError(`Connection error: ${err.message}`);
     }
@@ -800,52 +836,62 @@ export default function Room({
   };
 
   return (
-    <LiveKitRoom
-      serverUrl={connectionDetails.serverUrl}
-      token={connectionDetails.participantToken}
-      options={roomOptions}
-      onDisconnected={handleDisconnect}
-      onError={handleError}
-      onConnected={handleConnected}
-      video={false}
-      audio={true}
-      style={{ height: "100vh" }}
-      data-lk-theme="default"
-      connectOptions={connectOptions}
-    >
-      {connecting ? (
-        <div
-          className="connecting"
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            height: "100vh",
-            flexDirection: "column",
-            background: "#f9fafb",
-          }}
-        >
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-          <h2 className="mt-4 text-xl font-semibold">Connecting to room...</h2>
-          <p className="text-gray-600">Room: {connectionDetails.roomName}</p>
-          {isCapturingSystemAudio && (
-            <div className="mt-2 flex items-center bg-blue-50 px-3 py-1 rounded-lg text-blue-700 text-sm">
-              <span className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></span>
-              System Audio Capture Enabled
-            </div>
-          )}
-          {audioError && (
-            <div className="mt-2 px-3 py-1 bg-red-100 text-red-700 text-sm rounded-lg">
-              ⚠️ {audioError}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col h-screen bg-gray-50">
-          <RoomAudioRenderer />
-          <CallUI isCapturingSystemAudio={isCapturingSystemAudio} />
+    <div className="h-screen flex flex-col">
+      {audioError && (
+        <div className="bg-yellow-50 p-2 text-yellow-800 text-sm text-center">
+          ⚠️ {audioError}
         </div>
       )}
-    </LiveKitRoom>
+
+      <LiveKitRoom
+        serverUrl={connectionDetails.serverUrl}
+        token={connectionDetails.participantToken}
+        options={roomOptions}
+        onDisconnected={handleDisconnect}
+        onError={handleError}
+        onConnected={handleConnected}
+        video={false}
+        audio={true}
+        style={{ height: "100vh" }}
+        data-lk-theme="light"
+        connectOptions={connectOptions}
+      >
+        {connecting ? (
+          <div
+            className="connecting"
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              height: "100vh",
+              flexDirection: "column",
+              background: "#f9fafb",
+            }}
+          >
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            <h2 className="mt-4 text-xl font-semibold">
+              Connecting to room...
+            </h2>
+            <p className="text-gray-600">Room: {connectionDetails.roomName}</p>
+            {isCapturingSystemAudio && (
+              <div className="mt-2 flex items-center bg-blue-50 px-3 py-1 rounded-lg text-blue-700 text-sm">
+                <span className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></span>
+                System Audio Capture Enabled
+              </div>
+            )}
+            {audioError && (
+              <div className="mt-2 px-3 py-1 bg-red-100 text-red-700 text-sm rounded-lg">
+                ⚠️ {audioError}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col h-screen bg-gray-50">
+            <RoomAudioRenderer />
+            <CallUI isCapturingSystemAudio={isCapturingSystemAudio} />
+          </div>
+        )}
+      </LiveKitRoom>
+    </div>
   );
 }
