@@ -21,16 +21,12 @@ import {
   LocalParticipant,
   TranscriptionSegment,
 } from "livekit-client";
-import { SimpleControls } from "../../lib/SimpleControls";
-import { SettingsMenu } from "../../lib/SettingsMenu";
 import { ConnectionDetails } from "../../lib/types";
 import "../../styles/room.css";
 
 interface RoomProps {
   connectionDetails: ConnectionDetails;
   onDisconnect?: () => void;
-  audioDeviceId?: string;
-  isCapturingSystemAudio?: boolean;
 }
 
 interface TranscriptionMessage {
@@ -145,202 +141,11 @@ const TranscriptionChat = ({
 };
 
 // Call UI Component (main component inside the room)
-function CallUI({ isCapturingSystemAudio = false }) {
+function CallUI() {
   const { localParticipant } = useLocalParticipant();
   const participants = useParticipants();
   const room = useRoomContext();
   const [messages, setMessages] = useState<TranscriptionMessage[]>([]);
-  const [searchNumber, setSearchNumber] = useState("");
-  const [showModal, setShowModal] = useState(false);
-  const [audioLevel, setAudioLevel] = useState(0);
-  const [callRecords, setCallRecords] = useState<
-    { date: string; summary: string }[]
-  >([]);
-
-  // Monitor audio levels from microphone
-  useEffect(() => {
-    if (!localParticipant.isMicrophoneEnabled) return;
-
-    let audioContext: AudioContext | null = null;
-    let analyser: AnalyserNode | null = null;
-    let microphone: MediaStreamAudioSourceNode | null = null;
-    let dataArray: Uint8Array | null = null;
-
-    const setupAudioMonitoring = async () => {
-      try {
-        // Get the audio track from the local participant
-        const audioTrack = localParticipant.getTrack(
-          Track.Source.Microphone
-        )?.mediaStreamTrack;
-
-        if (!audioTrack) {
-          console.warn("No microphone track found");
-          return;
-        }
-
-        // Create a MediaStream with just this audio track
-        const stream = new MediaStream([audioTrack]);
-
-        // Set up audio context and analyzer
-        audioContext = new AudioContext();
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-
-        // Connect the stream to the analyzer
-        microphone = audioContext.createMediaStreamSource(stream);
-        microphone.connect(analyser);
-
-        // Create data array for analyzing
-        const bufferLength = analyser.frequencyBinCount;
-        dataArray = new Uint8Array(bufferLength);
-
-        // Start monitoring
-        const checkAudioLevel = () => {
-          if (!analyser || !dataArray) return;
-
-          analyser.getByteFrequencyData(dataArray);
-
-          // Calculate average level
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i];
-          }
-          const average = sum / dataArray.length / 255; // Normalize to 0-1
-
-          setAudioLevel(average);
-
-          // Continue monitoring
-          requestAnimationFrame(checkAudioLevel);
-        };
-
-        checkAudioLevel();
-        console.log(
-          "Audio monitoring started for",
-          isCapturingSystemAudio ? "BlackHole" : "microphone"
-        );
-      } catch (err) {
-        console.error("Error setting up audio monitoring:", err);
-      }
-    };
-
-    setupAudioMonitoring();
-
-    return () => {
-      // Clean up
-      if (audioContext) {
-        audioContext.close();
-      }
-    };
-  }, [localParticipant, isCapturingSystemAudio]);
-
-  const handleSearch = async () => {
-    if (!searchNumber) return;
-
-    try {
-      console.log(`Searching for call records for number: ${searchNumber}`);
-      // This would be replaced with an actual API call in production
-      setCallRecords([
-        {
-          date: "Today, 10:30 AM",
-          summary: "Customer inquired about subscription options.",
-        },
-        {
-          date: "Yesterday, 2:15 PM",
-          summary: "Follow-up call regarding billing issue.",
-        },
-      ]);
-      setShowModal(true);
-    } catch (error) {
-      console.error("Error fetching call records:", error);
-    }
-  };
-
-  // Modal Component for call records
-  const RecordsModal = () => {
-    const modalRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-      function handleClickOutside(event: MouseEvent) {
-        if (
-          modalRef.current &&
-          !modalRef.current.contains(event.target as Node)
-        ) {
-          setShowModal(false);
-        }
-      }
-
-      if (showModal) {
-        document.addEventListener("mousedown", handleClickOutside);
-        document.body.style.overflow = "hidden";
-      }
-
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-        document.body.style.overflow = "unset";
-      };
-    }, [showModal]);
-
-    if (!showModal) return null;
-
-    return (
-      <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50"
-        aria-modal="true"
-        role="dialog"
-      >
-        <div
-          ref={modalRef}
-          className="bg-white rounded-2xl shadow-lg max-w-xl w-full mx-4 flex flex-col"
-        >
-          <div className="p-4 border-b border-gray-200">
-            <div className="flex justify-between items-center">
-              <h2 className="text-gray-900 font-semibold text-lg">
-                Recent Call History
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-gray-500 hover:text-gray-700 transition-colors p-2 hover:bg-gray-100 rounded-lg"
-                aria-label="Close dialog"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-          <div className="p-4 max-h-[60vh] overflow-y-auto">
-            {callRecords.length > 0 ? (
-              <div className="space-y-3">
-                {callRecords.map((record, index) => (
-                  <div
-                    key={index}
-                    className="bg-gray-50 rounded-lg p-3 transition-colors hover:bg-gray-100 border border-gray-200"
-                  >
-                    <div className="text-gray-500 text-sm mb-1">
-                      {record.date}
-                    </div>
-                    <div className="text-gray-900 text-right">
-                      {record.summary}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-gray-500 text-center py-4">
-                No recent call records found for this number.
-              </div>
-            )}
-          </div>
-          <div className="p-4 border-t border-gray-200">
-            <button
-              onClick={() => setShowModal(false)}
-              className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   // Set up transcription listener
   useEffect(() => {
@@ -431,44 +236,9 @@ function CallUI({ isCapturingSystemAudio = false }) {
       <div className="w-full p-4">
         <div className="mx-auto max-w-xl">
           <div className="bg-white rounded-2xl shadow-lg">
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+            <div className="p-4 border-b border-gray-200">
               <div className="flex items-center">
                 <h1 className="text-xl font-semibold text-gray-900">In Call</h1>
-                {isCapturingSystemAudio && (
-                  <div className="ml-3 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full flex items-center">
-                    <span className="w-2 h-2 bg-blue-500 rounded-full mr-1 animate-pulse"></span>
-                    System Audio
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center space-x-2">
-                {/* Audio level indicator */}
-                <div className="flex items-center mr-2">
-                  <div className="h-4 w-20 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-blue-500 transition-all"
-                      style={{ width: `${Math.min(100, audioLevel * 100)}%` }}
-                    ></div>
-                  </div>
-                  <span className="text-xs text-gray-500 ml-1 w-8">
-                    {(audioLevel * 100).toFixed(0)}%
-                  </span>
-                </div>
-
-                <input
-                  type="number"
-                  placeholder="Enter number..."
-                  value={searchNumber}
-                  onChange={(e) => setSearchNumber(e.target.value)}
-                  className="px-3 py-1 rounded-lg bg-gray-50 text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-200"
-                  style={{ appearance: "textfield" }}
-                />
-                <button
-                  onClick={handleSearch}
-                  className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                  Search
-                </button>
               </div>
             </div>
             <div className="p-4">
@@ -491,6 +261,7 @@ function CallUI({ isCapturingSystemAudio = false }) {
                     </div>
                   </div>
                   <div className="flex items-center">
+                    {/* Status indicator */}
                     <div
                       className={`w-3 h-3 rounded-full ${
                         localParticipant.isMicrophoneEnabled
@@ -602,29 +373,17 @@ function CallUI({ isCapturingSystemAudio = false }) {
 
       {/* Transcription Chat */}
       <TranscriptionChat messages={messages} />
-
-      {/* Records Modal */}
-      <RecordsModal />
     </div>
   );
 }
 
-export default function Room({
-  connectionDetails,
-  onDisconnect,
-  audioDeviceId,
-  isCapturingSystemAudio = false,
-}: RoomProps) {
+export default function Room({ connectionDetails, onDisconnect }: RoomProps) {
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(true);
-  const [audioError, setAudioError] = useState<string | null>(null);
-  const [isUsingFallbackAudio, setIsUsingFallbackAudio] = useState(false);
 
-  // Safely create room options with fallbacks for audio settings
+  // Safely create room options
   const roomOptions: RoomOptions = useMemo(() => {
     try {
-      console.log("Setting up room options with audio device:", audioDeviceId);
-
       return {
         adaptiveStream: true,
         dynacast: true,
@@ -632,64 +391,25 @@ export default function Room({
           simulcast: true,
         },
         audioCaptureDefaults: {
-          deviceId: audioDeviceId || undefined,
-          echoCancellation: !isCapturingSystemAudio,
-          noiseSuppression: !isCapturingSystemAudio,
-          autoGainControl: !isCapturingSystemAudio,
+          // Standard audio processing
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
         },
       };
     } catch (err) {
       console.error("Error creating room options:", err);
-      // Fallback to basic options without specific audio device
       return {
         adaptiveStream: true,
         dynacast: true,
-        publishDefaults: {
-          simulcast: true,
-        },
       };
     }
-  }, [audioDeviceId, isCapturingSystemAudio]);
-
-  // Log audio device info for debugging
-  useEffect(() => {
-    if (audioDeviceId) {
-      console.log("Room component configured with audio device:", {
-        deviceId: audioDeviceId,
-        isCapturingSystemAudio,
-      });
-
-      // Verify the device exists
-      navigator.mediaDevices
-        .enumerateDevices()
-        .then((devices) => {
-          const audioInputs = devices.filter(
-            (device) => device.kind === "audioinput"
-          );
-          const deviceExists = audioInputs.some(
-            (device) => device.deviceId === audioDeviceId
-          );
-
-          if (deviceExists) {
-            const device = audioInputs.find(
-              (device) => device.deviceId === audioDeviceId
-            );
-            console.log("Audio device found:", device?.label);
-          } else {
-            console.warn(
-              "Configured audio device not found in available devices"
-            );
-          }
-        })
-        .catch((err) => {
-          console.error("Error checking audio devices:", err);
-        });
-    }
-  }, [audioDeviceId, isCapturingSystemAudio]);
+  }, []);
 
   const handleDisconnect = useCallback(() => {
-    console.log("Room disconnected, calling onDisconnect handler");
+    console.log("Room component: disconnect event triggered");
     if (onDisconnect) {
+      console.log("Room component: calling parent onDisconnect handler");
       onDisconnect();
     }
   }, [onDisconnect]);
@@ -698,14 +418,8 @@ export default function Room({
     console.error("Room connection error:", err);
 
     // Check for specific audio-related errors
-    if (
-      err.message.includes("audio") ||
-      err.message.includes("microphone") ||
-      err.message.includes("device")
-    ) {
-      setError(
-        `Audio device error: ${err.message}. Try using a different audio device.`
-      );
+    if (err.message.includes("audio") || err.message.includes("microphone")) {
+      setError(`Audio error: ${err.message}`);
     } else {
       setError(`Connection error: ${err.message}`);
     }
@@ -716,54 +430,9 @@ export default function Room({
   const handleConnected = useCallback(() => {
     console.log("Connected to room:", connectionDetails.roomName);
 
-    if (isUsingFallbackAudio && isCapturingSystemAudio) {
-      setAudioError(
-        "Connected using default audio device instead of BlackHole"
-      );
-    } else {
-      setAudioError(null);
-    }
-
     setConnecting(false);
     setError(null);
-  }, [
-    connectionDetails.roomName,
-    isUsingFallbackAudio,
-    isCapturingSystemAudio,
-  ]);
-
-  // Check if the audio device is valid
-  useEffect(() => {
-    const validateAudioDevice = async () => {
-      if (isCapturingSystemAudio && audioDeviceId) {
-        try {
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          const audioInputs = devices.filter(
-            (device) => device.kind === "audioinput"
-          );
-          const deviceExists = audioInputs.some(
-            (device) => device.deviceId === audioDeviceId
-          );
-
-          if (!deviceExists) {
-            console.warn(
-              `Selected audio device (${audioDeviceId}) not found among available devices`,
-              audioInputs
-            );
-            setAudioError(
-              "Selected audio capture device not found. Please select a different device."
-            );
-          } else {
-            setAudioError(null);
-          }
-        } catch (err) {
-          console.error("Error validating audio device:", err);
-        }
-      }
-    };
-
-    validateAudioDevice();
-  }, [audioDeviceId, isCapturingSystemAudio]);
+  }, [connectionDetails.roomName]);
 
   if (error) {
     return (
@@ -800,52 +469,50 @@ export default function Room({
   };
 
   return (
-    <LiveKitRoom
-      serverUrl={connectionDetails.serverUrl}
-      token={connectionDetails.participantToken}
-      options={roomOptions}
-      onDisconnected={handleDisconnect}
-      onError={handleError}
-      onConnected={handleConnected}
-      video={false}
-      audio={true}
-      style={{ height: "100vh" }}
-      data-lk-theme="default"
-      connectOptions={connectOptions}
-    >
-      {connecting ? (
-        <div
-          className="connecting"
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            height: "100vh",
-            flexDirection: "column",
-            background: "#f9fafb",
-          }}
-        >
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-          <h2 className="mt-4 text-xl font-semibold">Connecting to room...</h2>
-          <p className="text-gray-600">Room: {connectionDetails.roomName}</p>
-          {isCapturingSystemAudio && (
-            <div className="mt-2 flex items-center bg-blue-50 px-3 py-1 rounded-lg text-blue-700 text-sm">
-              <span className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></span>
-              System Audio Capture Enabled
-            </div>
-          )}
-          {audioError && (
-            <div className="mt-2 px-3 py-1 bg-red-100 text-red-700 text-sm rounded-lg">
-              ⚠️ {audioError}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col h-screen bg-gray-50">
-          <RoomAudioRenderer />
-          <CallUI isCapturingSystemAudio={isCapturingSystemAudio} />
-        </div>
-      )}
-    </LiveKitRoom>
+    <div className="h-screen flex flex-col">
+      <LiveKitRoom
+        serverUrl={connectionDetails.serverUrl}
+        token={connectionDetails.participantToken}
+        options={roomOptions}
+        onDisconnected={handleDisconnect}
+        onError={handleError}
+        onConnected={handleConnected}
+        video={false}
+        audio={true}
+        style={{ height: "100vh" }}
+        data-lk-theme="light"
+        connectOptions={connectOptions}
+      >
+        {connecting ? (
+          <div
+            className="connecting"
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              height: "100vh",
+              flexDirection: "column",
+              background: "#f9fafb",
+            }}
+          >
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            <h2 className="mt-4 text-xl font-semibold">
+              Connecting to room...
+            </h2>
+            <p className="text-gray-600">Room: {connectionDetails.roomName}</p>
+            {error && (
+              <div className="mt-2 px-3 py-1 bg-red-100 text-red-700 text-sm rounded-lg">
+                ⚠️ {error}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col h-screen bg-gray-50">
+            <RoomAudioRenderer />
+            <CallUI />
+          </div>
+        )}
+      </LiveKitRoom>
+    </div>
   );
 }

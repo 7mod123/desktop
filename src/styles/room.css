@@ -436,7 +436,7 @@
 }
 
 /* Override some LiveKit styles */
-[data-lk-theme="default"] {
+[data-lk-theme="light"] {
   --lk-prose-html-background: var(--lk-bg-1);
   --lk-prose-html-color: var(--lk-text-1);
 }
