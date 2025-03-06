@@ -21,11 +21,8 @@ import {
   LocalParticipant,
   TranscriptionSegment,
 } from "livekit-client";
-import { SimpleControls } from "../../lib/SimpleControls";
-import { SettingsMenu } from "../../lib/SettingsMenu";
 import { ConnectionDetails } from "../../lib/types";
 import "../../styles/room.css";
-import { isTauri, safeInvoke } from "../../lib/tauri-utils";
 
 interface RoomProps {
   connectionDetails: ConnectionDetails;
