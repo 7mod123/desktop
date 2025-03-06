@@ -9,28 +9,12 @@ fn greet(name: &str) -> String {
     lib::greet(name)
 }
 
-#[tauri::command]
-fn get_audio_devices() -> Result<Vec<lib::AudioDevice>, String> {
-    lib::get_audio_devices()
-}
-
-#[tauri::command]
-fn start_audio_capture(device_id: String) -> Result<(), String> {
-    lib::start_audio_capture(device_id)
-}
-
-#[tauri::command]
-fn stop_audio_capture() -> Result<(), String> {
-    lib::stop_audio_capture()
-}
-
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            greet, 
-            get_audio_devices, 
-            start_audio_capture,
-            stop_audio_capture
+            greet
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
