@@ -20,9 +20,11 @@ import {
   Participant,
   LocalParticipant,
   TranscriptionSegment,
+  LocalAudioTrack,
 } from "livekit-client";
 import { ConnectionDetails } from "../../lib/types";
 import "../../styles/room.css";
+import SystemAudioIntegration from "./SystemAudioIntegration";
 
 interface RoomProps {
   connectionDetails: ConnectionDetails;
@@ -377,142 +379,75 @@ function CallUI() {
   );
 }
 
-export default function Room({ connectionDetails, onDisconnect }: RoomProps) {
+// Main Room component
+const Room: React.FC<RoomProps> = ({ connectionDetails, onDisconnect }) => {
+  const [roomOptions, setRoomOptions] = useState<RoomOptions>({
+    adaptiveStream: true,
+    dynacast: true,
+    publishDefaults: {
+      simulcast: true,
+      audioPreset: { maxBitrate: 64000 },
+    },
+  });
+
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(true);
 
-  // Safely create room options
-  const roomOptions: RoomOptions = useMemo(() => {
-    try {
-      return {
-        adaptiveStream: true,
-        dynacast: true,
-        publishDefaults: {
-          simulcast: true,
-        },
-        audioCaptureDefaults: {
-          // Standard audio processing
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      };
-    } catch (err) {
-      console.error("Error creating room options:", err);
-      return {
-        adaptiveStream: true,
-        dynacast: true,
-      };
-    }
-  }, []);
-
   const handleDisconnect = useCallback(() => {
-    console.log("Room component: disconnect event triggered");
     if (onDisconnect) {
-      console.log("Room component: calling parent onDisconnect handler");
       onDisconnect();
     }
   }, [onDisconnect]);
 
-  const handleError = useCallback((err: Error) => {
-    console.error("Room connection error:", err);
-
-    // Check for specific audio-related errors
-    if (err.message.includes("audio") || err.message.includes("microphone")) {
-      setError(`Audio error: ${err.message}`);
-    } else {
-      setError(`Connection error: ${err.message}`);
-    }
-
+  const handleError = useCallback((error: Error) => {
+    console.error("Room error:", error);
+    setError(error.message);
     setConnecting(false);
   }, []);
 
-  const handleConnected = useCallback(() => {
-    console.log("Connected to room:", connectionDetails.roomName);
-
+  const handleConnected = useCallback((room: LiveKitRoomType) => {
     setConnecting(false);
-    setError(null);
-  }, [connectionDetails.roomName]);
+    console.log("Connected to room:", room.name);
+  }, []);
 
   if (error) {
     return (
-      <div
-        className="error-container"
-        style={{
-          padding: "2rem",
-          textAlign: "center",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100vh",
-        }}
-      >
-        <h2>Connection Error</h2>
-        <p>{error}</p>
-        <button onClick={handleDisconnect} style={{ marginTop: "1rem" }}>
-          Go Back
-        </button>
+      <div className="error-container">
+        <div className="error-message">
+          <h3>Connection Error</h3>
+          <p>{error}</p>
+          <button onClick={handleDisconnect}>Return to Lobby</button>
+        </div>
       </div>
     );
   }
 
-  // Create connect options for LiveKitRoom
-  const connectOptions = {
-    autoSubscribe: true,
-    rtcConfig: {
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-      ],
-    },
-  };
-
   return (
-    <div className="h-screen flex flex-col">
+    <div className="room-container">
       <LiveKitRoom
         serverUrl={connectionDetails.serverUrl}
         token={connectionDetails.participantToken}
         options={roomOptions}
         onDisconnected={handleDisconnect}
         onError={handleError}
-        onConnected={handleConnected}
         video={false}
         audio={true}
-        style={{ height: "100vh" }}
-        data-lk-theme="light"
-        connectOptions={connectOptions}
       >
-        {connecting ? (
-          <div
-            className="connecting"
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              height: "100vh",
-              flexDirection: "column",
-              background: "#f9fafb",
-            }}
-          >
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-            <h2 className="mt-4 text-xl font-semibold">
-              Connecting to room...
-            </h2>
-            <p className="text-gray-600">Room: {connectionDetails.roomName}</p>
-            {error && (
-              <div className="mt-2 px-3 py-1 bg-red-100 text-red-700 text-sm rounded-lg">
-                ⚠️ {error}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col h-screen bg-gray-50">
-            <RoomAudioRenderer />
-            <CallUI />
-          </div>
-        )}
+        <div className="room-content">
+          <CallUI />
+          {connecting && (
+            <div className="connecting-overlay">
+              <div className="connecting-spinner"></div>
+              <p>Connecting to room...</p>
+            </div>
+          )}
+
+          {/* Add system audio integration */}
+          <SystemAudioIntegration />
+        </div>
       </LiveKitRoom>
     </div>
   );
-}
+};
+
+export default Room;

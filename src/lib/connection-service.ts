@@ -5,9 +5,13 @@ import { v4 as uuidv4 } from "uuid";
 import { AccessToken } from "livekit-server-sdk";
 
 // LiveKit credentials from .env.local
-const LIVEKIT_URL = "wss://testfluent-d0ievbuo.livekit.cloud";
-const LIVEKIT_API_KEY = "APIduLK8hJ6zanf";
-const LIVEKIT_API_SECRET = "HRC4SgM7Tqo5f5e0xtjjxTNq6oydOT7ThStebJfDaa8B";
+const LIVEKIT_URL =
+  import.meta.env.VITE_LIVEKIT_URL || "wss://testfluent-d0ievbuo.livekit.cloud";
+const LIVEKIT_API_KEY =
+  import.meta.env.VITE_LIVEKIT_API_KEY || "APIduLK8hJ6zanf";
+const LIVEKIT_API_SECRET =
+  import.meta.env.VITE_LIVEKIT_API_SECRET ||
+  "HRC4SgM7Tqo5f5e0xtjjxTNq6oydOT7ThStebJfDaa8B";
 
 // This would typically be an API call to your server
 // For Tauri, we're implementing a token generation directly in the client
